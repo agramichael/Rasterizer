@@ -4,13 +4,14 @@ FILE=skeleton
 #   Directories
 S_DIR=Source
 B_DIR=Build
+GLMDIR=../glm/
 
 ########
 #   Output
 EXEC=$(B_DIR)/$(FILE)
 
 # default build settings
-CC_OPTS=-c -pipe -Wall -Wno-switch -ggdb -g3 
+CC_OPTS=-c -pipe -Wall -Wno-switch -ggdb -g3
 LN_OPTS=
 CC=g++
 
@@ -38,10 +39,10 @@ $(B_DIR)/$(FILE).o : $(S_DIR)/$(FILE).cpp $(S_DIR)/SDLauxiliary.h $(S_DIR)/TestM
 
 
 ########
-#   Main build rule     
+#   Main build rule
 Build : $(OBJ) Makefile
 	$(CC) $(LN_OPTS) -o $(EXEC) $(OBJ) $(SDL_LDFLAGS)
 
 
 clean:
-	rm -f $(B_DIR)/* 
+	rm -f $(B_DIR)/*
