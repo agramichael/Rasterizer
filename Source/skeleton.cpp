@@ -31,20 +31,19 @@ float yaw = 5 * M_PI / 180;
 float total_rot = 0;
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
 vec4 lightPos(0,-0.5,-0.7, 1);
-vec3 lightPower = 1.1f*vec3( 1, 1, 1 );
+vec3 lightPower = 14.f*vec3( 1, 1, 1 );
 vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
-
+vec4 currentNormal;
+vec3 currentReflectance;
 struct Pixel {
   int x;
   int y;
   float zinv;
-  vec3 illumination;
+  vec4 pos3d;
 };
 
 struct Vertex{
   vec4 position;
-  vec4 normal;
-  vec3 reflectance;
 };
 
 /* ----------------------------------------------------------------------------*/
@@ -100,13 +99,8 @@ void Draw(screen* screen)
     vertices[0].position = triangles[i].v0;
     vertices[1].position = triangles[i].v1;
     vertices[2].position = triangles[i].v2;
-    vertices[0].normal = triangles[i].normal;
-    vertices[1].normal = triangles[i].normal;
-    vertices[2].normal = triangles[i].normal;
-    vertices[0].reflectance = 2.f * vec3(1,1,1);
-    vertices[1].reflectance = 2.f * vec3(1,1,1);
-    vertices[2].reflectance = 2.f * vec3(1,1,1);
-
+    currentNormal = triangles[i].normal;
+    currentReflectance = 1.f * vec3(1,1,1);
     DrawPolygon(screen, vertices, color);
   }
 }
@@ -128,21 +122,15 @@ void VertexShader( Vertex& v, Pixel& p )
 {
   update_R(total_rot);
   mat4 R_i = glm::inverse(R);
-  v.position = R_i * (v.position - cameraPos);
-  float z = v.position.z;
-  float y = v.position.y;
-  float x = v.position.x;
+  vec4 current = v.position;
+  current = R_i * (current - cameraPos);
+  float z = current.z;
+  float y = current.y;
+  float x = current.x;
   p.zinv = 1 / z;
   p.x = FOCAL_LENGTH * x * p.zinv + SCREEN_WIDTH/2;
   p.y = FOCAL_LENGTH * y * p.zinv + SCREEN_HEIGHT/2;
-
-  //calculate illumination
-  vec3 r = vec3(lightPos) - vec3(v.position);
-  float radius = glm::length(r);
-  r = normalize(r);
-  vec3 normal = normalize(vec3(v.normal));
-  float l = max( dot(r, normal), float(0.0) ) / ( 4 * M_PI * pow(radius, 2) );
-  p.illumination = v.reflectance * (( l * lightPower ) + indirectLight);
+  p.pos3d = v.position;
 }
 
 void ComputePolygonRows( vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels )
@@ -187,12 +175,12 @@ void ComputePolygonRows( vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels,
       if (result[k].x < leftPixels[offset].x) {
         leftPixels[offset].x = result[k].x;
         leftPixels[offset].zinv = result[k].zinv;
-        leftPixels[offset].illumination = result[k].illumination;
+        leftPixels[offset].pos3d = result[k].pos3d;
       }
       if (result[k].x > rightPixels[offset].x) {
         rightPixels[offset].x = result[k].x;
         rightPixels[offset].zinv = result[k].zinv;
-        rightPixels[offset].illumination = result[k].illumination;
+        rightPixels[offset].pos3d = result[k].pos3d;
       }
     }
   }
@@ -223,8 +211,15 @@ void PixelShader( screen* screen, Pixel& p, vec3 color){
   int y = p.y;
   float zinv = p.zinv;
   if( x > 0 && y > 0 && x < SCREEN_WIDTH && y < SCREEN_HEIGHT && zinv >= depthBuffer[y][x] ){
+    vec3 r = vec3(lightPos) - vec3(p.pos3d);
+    //cout << p.pos3d.x << "," << p.pos3d.y << "," << p.pos3d.z << "," << "\n";
+    float radius = glm::length(r);
+    r = normalize(r);
+    vec3 normal = normalize(vec3(currentNormal));
+    float l = max( dot(r, normal), float(0.0) ) / ( 4 * M_PI * pow(radius, 2) );
+    vec3 illumination = currentReflectance * (( l * lightPower ) + indirectLight);
     depthBuffer[y][x] = zinv;
-    PutPixelSDL( screen, x, y, p.illumination * color);
+    PutPixelSDL( screen, x, y, illumination * color);
   }
 }
 
@@ -275,6 +270,30 @@ bool Update()
       case SDLK_ESCAPE:
 	      /* Move camera quit */
 	      return false;
+      case SDLK_w:
+        // move light forwards
+        lightPos += 0.2f * forward;
+        break;
+      case SDLK_s:
+        // move light backwards
+        lightPos -= 0.2f * forward;
+        break;
+      case SDLK_a:
+        // move light left
+        lightPos -= 0.2f * right;
+        break;
+      case SDLK_d:
+        // move light right
+        lightPos += 0.2f * right;
+        break;
+      case SDLK_q:
+        // move light up
+        lightPos -= 0.2f * down;
+        break;
+      case SDLK_e:
+        // move light down
+        lightPos += 0.2f * down;
+        break;      
       }
 	  }
   }
@@ -284,32 +303,27 @@ bool Update()
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
 {
   int N = result.size();
+  vec4 a_pos = a.pos3d * a.zinv;
+  vec4 b_pos = b.pos3d * b.zinv;
   vec3 step;
   step.x = (b.x - a.x) / float(max(N-1,1));
   step.y = (b.y - a.y) / float(max(N-1,1));
   step.z = (b.zinv - a.zinv) / float(max(N-1,1));
 
-  vec3 i_step;
-  vec3 i_a = a.illumination;
-  vec3 i_b = b.illumination;
-
-  i_step = (i_b - i_a) / float(max(N-1,1));
-
-  vec3 i_current = i_a;
-
+  vec4 pos_step = (b_pos - a_pos) / float(max(N-1,1));
   vec3 current;
+  vec4 current_position = a_pos;
   current.x = a.x;
   current.y = a.y;
   current.z = a.zinv;
-
   for( int i=0; i<N; ++i )
   {
+    result[i].zinv = current.z;
     result[i].x = round(current.x);
     result[i].y = round(current.y);
-    result[i].zinv = current.z;
-    result[i].illumination = i_current;
+    result[i].pos3d = current_position / current.z;
+    current_position += pos_step;
     current += step;
-    i_current += i_step;
   }
 }
 
