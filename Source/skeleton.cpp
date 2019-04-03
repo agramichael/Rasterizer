@@ -1,6 +1,11 @@
 #include <iostream>
 #include <glm/glm.hpp>
 #include <SDL.h>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <sstream>
+
 #include "SDLauxiliary.h"
 #include "TestModelH.h"
 #include <stdint.h>
@@ -12,6 +17,7 @@ using glm::mat3;
 using glm::vec4;
 using glm::mat4;
 using glm::ivec2;
+using glm::ivec4;
 
 
 SDL_Event event;
@@ -60,13 +66,17 @@ void ComputePolygonRows(  vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels
 void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>& rightPixels, vec3 color);
 void DrawPolygon(screen* screen,  vector<Vertex>& vertices, vec3 color );
 void update_R(float y);
+void load_triangles(std::vector<Triangle>& triangles);
+vector<std::string> split(string strToSplit, char delimeter);
 
 int main( int argc, char* argv[] )
 {
 
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
-  LoadTestModel( triangles );
-
+  load_triangles( triangles );
+  for(size_t t = 0; t < triangles.size(); t++){
+    cout << triangles[t].v0.x << ", " << triangles[t].v0.y << ", " << triangles[t].v0.z << ", " << endl;
+  }
   while ( Update())
     {
       Draw(screen);
@@ -343,4 +353,82 @@ void DrawPolygonEdges(screen* screen, vector<Vertex>& vertices )
     vec3 color( 1, 1, 1 );
     DrawLineSDL( screen, projectedVertices[i], projectedVertices[j], color );
   }
+}
+
+
+
+void load_triangles(vector<Triangle>& triangles) {
+  string line; //stores
+  vector<vec3> vertices;
+  vector<ivec4> facets;
+  std::ifstream modelFile;
+  modelFile.open("Source/cubo.obj", std::ifstream::in);
+
+  if (!modelFile || modelFile.fail()) {
+    cout << "Unable to open file" << endl;
+    exit(1);   // call system to stop
+  }
+
+  // read file line by line create a vec3 for 3D coordinates
+  while( std::getline(modelFile, line) ){
+    if(line[0] == 'v' && line[1] == ' '){
+      stringstream ss(line);
+      string item;
+      vector<string> splittedStrings;
+      int i = 0;
+      while(std::getline(ss, item, ' ')){
+        if(i != 0){ 
+          splittedStrings.push_back(string(item));
+        }
+        i++;
+      }
+        vec3 vec(stof(splittedStrings[1]), stof(splittedStrings[2]), stof(splittedStrings[3]));
+      vertices.push_back(vec);
+    }
+    if(line[0] == 'f'){
+      stringstream ss(line);
+      string item;
+      vector<string> splittedStrings;
+      int i = 0;
+      while(std::getline(ss, item, ' ')){  //1st char in each item = one of facets vertex index.
+        if(i != 0) splittedStrings.push_back(string(item));
+        i++;
+      }
+      // split up this thing below with " " and get the first in each
+      //splittedStrings[0] == '1/1/1 2/2/2 3/3/3 4/4/4' 
+      ivec4 facet;
+        for(size_t i = 0; i < splittedStrings.size(); i++){
+          vector<string> words = split(splittedStrings[i], ' '); // 1 word = "10/12/11"
+
+          for(size_t j = 0; j < words.size(); j++) { 
+            vector<string> items = split(words[j], '/');  //1 item = 10
+            if(i != 4)facet[i] = atof(items[0].c_str());
+          }
+      }
+      facets.push_back(facet);
+    }
+  }
+  vec3 green(  0.15f, 0.75f, 0.15f );
+  for(size_t i = 0; i < facets.size(); i++){
+    vec4 v0 = vec4(vertices[facets[i][0]][0], vertices[facets[i][0]][1], vertices[facets[i][0]][2], 1.0) ;
+    vec4 v1 = vec4(vertices[facets[i][1]][0], vertices[facets[i][1]][1], vertices[facets[i][1]][2], 1.0) ;
+    vec4 v2 = vec4(vertices[facets[i][2]][0], vertices[facets[i][2]][1], vertices[facets[i][2]][2], 1.0) ;
+    vec4 v3 = vec4(vertices[facets[i][3]][0], vertices[facets[i][3]][1], vertices[facets[i][3]][2], 1.0) ;
+    triangles.push_back(Triangle( v0, v1, v2, green ));
+    triangles.push_back(Triangle( v0, v2, v3, green ));
+  }
+  modelFile.close();
+}
+
+
+std::vector<std::string> split(std::string strToSplit, char delimeter)
+{
+    std::stringstream ss(strToSplit);
+    std::string item;
+    std::vector<std::string> splittedStrings;
+    while (std::getline(ss, item, delimeter))
+    {
+       splittedStrings.push_back(item);
+    }
+    return splittedStrings;
 }
