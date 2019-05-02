@@ -11,10 +11,12 @@ void ComputePolygonRows(  vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels
 void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>& rightPixels, vec3 color);
 void DrawPolygon(screen* screen,  vector<Vertex>& vertices, vec3 color );
 void update_R(float y);
+void FilterCreation(float GKernel[3][3], float sigma);
 
 int main() {
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   LoadTestModel( triangles );
+  update_R(0);
 
   while ( Update() ) {
       Draw(screen);
@@ -31,6 +33,8 @@ void Draw(screen* screen) {
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   memset(depthBuffer, 0, screen->height*screen->width*sizeof(float));
+  memset(colorBuffer, 0, screen->height*screen->width*sizeof(vec3));
+
 
   vec3 color;
 
@@ -48,6 +52,8 @@ void Draw(screen* screen) {
     currentReflectance = 1.f * vec3(1,1,1);
     DrawPolygon(screen, vertices, color);
   }
+
+
 
   depth_pass = false;
 
@@ -178,10 +184,51 @@ void PixelShader( screen* screen, Pixel& p, vec3 color){
     vec3 normal = normalize(vec3(currentNormal));
     float l = max( dot(r, normal), float(0.0) ) / ( 4 * M_PI * pow(radius, 2) );
     vec3 illumination = currentReflectance * (( l * lightPower ) + indirectLight);
-    if (depth_pass) depthBuffer[y][x] = zinv;
-    if (!depth_pass) PutPixelSDL( screen, x, y, illumination * color);
+    if (depth_pass) {
+      depthBuffer[y][x] = zinv;
+      colorBuffer[y][x] = color;
+    }
+    else{
+      float current_depth = 1/depthBuffer[y][x];
+      float kernel[3][3];
+      float diff = abs(focal_depth - current_depth);
+      FilterCreation(kernel, diff);
+
+      vec3 blur = vec3(0,0,0);
+
+      for (int i = -1; i < 2; i++) {
+        for (int j = -1; j < 2; j++) {
+          blur += kernel[i+1][j+1] * colorBuffer[y + i][x + j];
+        }
+      }
+
+      // cout << "Blur vec3: " << blur.x << ", " << blur.y << ", " << blur.z << "\n";
+      PutPixelSDL( screen, x, y, illumination * blur);
+    }
   }
 }
+
+void FilterCreation(float GKernel[][3], float sigma) { 
+    // intialising standard deviation to 1.0 
+    float r, s = 2.0 * sigma * sigma; 
+  
+    // sum is for normalization 
+    float sum = 0.0; 
+  
+    // generating 3x3 kernel 
+    for (int x = -1; x <= 1; x++) { 
+        for (int y = -1; y <= 1; y++) { 
+            r = sqrt(x * x + y * y); 
+            GKernel[x + 1][y + 1] = (exp(-(r * r) / s)) / (M_PI * s); 
+            sum += GKernel[x + 1][y + 1]; 
+        } 
+    } 
+  
+    // normalising the Kernel 
+    for (int i = 0; i < 3; ++i) 
+        for (int j = 0; j < 3; ++j) 
+            GKernel[i][j] /= sum; 
+} 
 
 void update_R(float y) {
   R[0][0] = R[2][2] = cos(y);
