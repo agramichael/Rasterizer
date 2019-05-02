@@ -33,6 +33,7 @@ vec3 lightPower = 14.f*vec3( 1, 1, 1 );
 vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 vec4 currentNormal;
 vec3 currentReflectance;
+bool depth_pass = true;
 
 struct Pixel {
   int x;
@@ -44,7 +45,5 @@ struct Pixel {
 struct Vertex{
   vec4 position;
 };
-
-
 
 #endif

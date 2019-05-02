@@ -30,14 +30,28 @@ int main() {
 void Draw(screen* screen) {
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
+  memset(depthBuffer, 0, screen->height*screen->width*sizeof(float));
+
   vec3 color;
+
+  depth_pass = true;
+
+  // Depth pass
   #pragma omp parallel for schedule(static,10)
-  for( int y=0; y<SCREEN_HEIGHT; ++y ) {
-    for( int x=0; x<SCREEN_WIDTH; ++x ) {
-      depthBuffer[y][x] = 0;
-    }
+  for( uint32_t i=0; i<triangles.size(); ++i ) {
+    color = triangles[i].color;
+    vector<Vertex> vertices(3);
+    vertices[0].position = triangles[i].v0;
+    vertices[1].position = triangles[i].v1;
+    vertices[2].position = triangles[i].v2;
+    currentNormal = triangles[i].normal;
+    currentReflectance = 1.f * vec3(1,1,1);
+    DrawPolygon(screen, vertices, color);
   }
 
+  depth_pass = false;
+
+  // Normal pass
   #pragma omp parallel for schedule(static,10)
   for( uint32_t i=0; i<triangles.size(); ++i ) {
     color = triangles[i].color;
@@ -156,7 +170,7 @@ void PixelShader( screen* screen, Pixel& p, vec3 color){
   int x = p.x;
   int y = p.y;
   float zinv = p.zinv;
-  if( x > 0 && y > 0 && x < SCREEN_WIDTH && y < SCREEN_HEIGHT && zinv >= depthBuffer[y][x] ){
+  if( x > 0 && y > 0 && x < SCREEN_WIDTH && y < SCREEN_HEIGHT && zinv >= depthBuffer[y][x]){
     vec3 r = vec3(lightPos) - vec3(p.pos3d);
     //cout << p.pos3d.x << "," << p.pos3d.y << "," << p.pos3d.z << "," << "\n";
     float radius = glm::length(r);
@@ -164,8 +178,8 @@ void PixelShader( screen* screen, Pixel& p, vec3 color){
     vec3 normal = normalize(vec3(currentNormal));
     float l = max( dot(r, normal), float(0.0) ) / ( 4 * M_PI * pow(radius, 2) );
     vec3 illumination = currentReflectance * (( l * lightPower ) + indirectLight);
-    depthBuffer[y][x] = zinv;
-    PutPixelSDL( screen, x, y, illumination * color);
+    if (depth_pass) depthBuffer[y][x] = zinv;
+    if (!depth_pass) PutPixelSDL( screen, x, y, illumination * color);
   }
 }
 
@@ -198,10 +212,10 @@ bool Update()
     int key_code = e.key.keysym.sym;
     switch(key_code) {
       case SDLK_UP:
-        cameraPos += forward;
+        cameraPos += 0.2f * forward;
 	      break;
       case SDLK_DOWN:
-        cameraPos -= forward;
+        cameraPos -= 0.2f * forward;
     		break;
       case SDLK_LEFT:
         update_R(yaw);
