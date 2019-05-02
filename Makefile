@@ -1,4 +1,4 @@
-FILE=skeleton
+FILE=main
 
 ########
 #   Directories
@@ -11,7 +11,7 @@ GLMDIR=../glm/
 EXEC=$(B_DIR)/$(FILE)
 
 # default build settings
-CC_OPTS=-c -pipe -Wall -Wno-switch -ggdb -g3
+CC_OPTS=-c -std=c++11 -pipe -Wall -Wno-switch -ggdb -g3 -O3 -Wextra -pedantic -march=native -mtune=native -lpthread -mfpmath=sse -msse4.2
 LN_OPTS=
 CC=g++
 

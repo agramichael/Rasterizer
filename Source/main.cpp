@@ -1,53 +1,4 @@
-#include <iostream>
-#include <glm/glm.hpp>
-#include <SDL.h>
-#include "SDLauxiliary.h"
-#include "TestModelH.h"
-#include <stdint.h>
-
-using namespace std;
-using glm::vec2;
-using glm::vec3;
-using glm::mat3;
-using glm::vec4;
-using glm::mat4;
-using glm::ivec2;
-
-
-SDL_Event event;
-
-#define SCREEN_WIDTH 400
-#define SCREEN_HEIGHT 400
-#define FULLSCREEN_MODE false
-
-/* ----------------------------------------------------------------------------*/
-/* GLOBALS                                                                   */
-vec4 cameraPos( 0, 0, -3.001,1 );
-float FOCAL_LENGTH = SCREEN_HEIGHT;
-vector<Triangle> triangles;
-mat4 R;
-mat4 camToWorld;
-float yaw = 5 * M_PI / 180;
-float total_rot = 0;
-float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
-vec4 lightPos(0,-0.5,-0.7, 1);
-vec3 lightPower = 14.f*vec3( 1, 1, 1 );
-vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
-vec4 currentNormal;
-vec3 currentReflectance;
-struct Pixel {
-  int x;
-  int y;
-  float zinv;
-  vec4 pos3d;
-};
-
-struct Vertex{
-  vec4 position;
-};
-
-/* ----------------------------------------------------------------------------*/
-/* FUNCTIONS                                                                   */
+#include "rasterizer.h"
 
 bool Update();
 void Draw(screen* screen);
@@ -61,39 +12,34 @@ void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>&
 void DrawPolygon(screen* screen,  vector<Vertex>& vertices, vec3 color );
 void update_R(float y);
 
-int main( int argc, char* argv[] )
-{
-
+int main( int argc, char* argv[] ) {
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   LoadTestModel( triangles );
 
-  while ( Update())
-    {
+  while ( Update() ) {
       Draw(screen);
       SDL_Renderframe(screen);
     }
 
-  SDL_SaveImage( screen, "screenshot.bmp" );
-
+  SDL_SaveImage(screen, "screenshot.bmp");
   KillSDL(screen);
   return 0;
 }
 
 /*Place your drawing here*/
-void Draw(screen* screen)
-{
+void Draw(screen* screen) {
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   vec3 color;
+  #pragma omp parallel for schedule(static,10)
   for( int y=0; y<SCREEN_HEIGHT; ++y ) {
     for( int x=0; x<SCREEN_WIDTH; ++x ) {
       depthBuffer[y][x] = 0;
     }
   }
 
- // DrawLineSDL( screen, a,  b,  color );
- for( uint32_t i=0; i<triangles.size(); ++i )
-  {
+  #pragma omp parallel for schedule(static,10)
+  for( uint32_t i=0; i<triangles.size(); ++i ) {
     color = triangles[i].color;
     vector<Vertex> vertices(3);
     vertices[0].position = triangles[i].v0;
