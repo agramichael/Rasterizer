@@ -12,7 +12,7 @@ void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>&
 void DrawPolygon(screen* screen,  vector<Vertex>& vertices, vec3 color );
 void update_R(float y);
 
-int main( int argc, char* argv[] ) {
+int main() {
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   LoadTestModel( triangles );
 
