@@ -28,19 +28,17 @@ int main() {
   return 0;
 }
 
-/*Place your drawing here*/
+// Render a frame
 void Draw(screen* screen) {
-  /* Clear buffer */
+  // Clear buffers
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   memset(depthBuffer, 0, screen->height*screen->width*sizeof(float));
   memset(colorBuffer, 0, screen->height*screen->width*sizeof(vec3));
 
-
   vec3 color;
 
+  // Depth pass - do one pass without drawing, only for collecting depth information
   depth_pass = true;
-
-  // Depth pass
   #pragma omp parallel for schedule(static,10)
   for( uint32_t i=0; i<triangles.size(); ++i ) {
     color = triangles[i].color;
@@ -53,11 +51,8 @@ void Draw(screen* screen) {
     DrawPolygon(screen, vertices, color);
   }
 
-
-
+  // Normal pass - for every triangle, store its vertices, normal and color: use this to draw them.
   depth_pass = false;
-
-  // Normal pass
   #pragma omp parallel for schedule(static,10)
   for( uint32_t i=0; i<triangles.size(); ++i ) {
     color = triangles[i].color;
@@ -71,19 +66,24 @@ void Draw(screen* screen) {
   }
 }
 
+// Draw a polygon
 void DrawPolygon(screen* screen, vector<Vertex>& vertices, vec3 color )
 {
   int V = vertices.size();
   vector<Pixel> vertexPixels( V );
+  // Project each vertex into the image space
   for( int i=0; i<V; ++i ) {
     VertexShader( vertices[i], vertexPixels[i] );
   }
   vector<Pixel> leftPixels;
   vector<Pixel> rightPixels;
+  // Compute beginning and ending of each row
   ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
+  // Draw rows
   DrawPolygonRows(screen, leftPixels, rightPixels, color );
 }
 
+// Project a vertex into image space: save the inverse of its depth and its original 3d position
 void VertexShader( Vertex& v, Pixel& p )
 {
   update_R(total_rot);
@@ -99,6 +99,7 @@ void VertexShader( Vertex& v, Pixel& p )
   p.pos3d = v.position;
 }
 
+// Compute beginning and ending of each row in the polygon
 void ComputePolygonRows( vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels )
 {
 // 1. Find max and min y-value of the polygon
@@ -152,6 +153,7 @@ void ComputePolygonRows( vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels,
   }
 }
 
+// Draw the rows of a polygon
 void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>& rightPixels, vec3 color )
 {
   for( size_t row = 0; row < leftPixels.size(); row++ ) {
@@ -159,6 +161,7 @@ void DrawPolygonRows(screen* screen,  vector<Pixel>& leftPixels,  vector<Pixel>&
   }
 }
 
+// Draw a line from a to b (interpolating in between)
 void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color )
 {
   Pixel delta;
@@ -172,6 +175,7 @@ void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color )
   }
 }
 
+// Draw one pixel: calculating illumination and blur factors
 void PixelShader( screen* screen, Pixel& p, vec3 color){
   int x = p.x;
   int y = p.y;
@@ -209,13 +213,10 @@ void PixelShader( screen* screen, Pixel& p, vec3 color){
 }
 
 void FilterCreation(float GKernel[][3], float sigma) { 
-    // intialising standard deviation to 1.0 
     float r, s = 2.0 * sigma * sigma; 
-  
-    // sum is for normalization 
     float sum = 0.0; 
   
-    // generating 3x3 kernel 
+    // Generating 3x3 kernel 
     for (int x = -1; x <= 1; x++) { 
         for (int y = -1; y <= 1; y++) { 
             r = sqrt(x * x + y * y); 
@@ -224,12 +225,13 @@ void FilterCreation(float GKernel[][3], float sigma) {
         } 
     } 
   
-    // normalising the Kernel 
+    // Normalising the kernel 
     for (int i = 0; i < 3; ++i) 
         for (int j = 0; j < 3; ++j) 
             GKernel[i][j] /= sum; 
 } 
 
+// Update the rotation matrix
 void update_R(float y) {
   R[0][0] = R[2][2] = cos(y);
   float s = sin(y);
@@ -237,18 +239,12 @@ void update_R(float y) {
   R[0][2] = -s;
 }
 
-/*Place updates of parameters here*/
+// Camera and light movement with rotation matrix updates
 bool Update()
 {
   vec4 right( R[0][0], R[0][1], R[0][2], 1 );
   vec4 down( R[1][0], R[1][1], R[1][2], 1 );
   vec4 forward( R[2][0], R[2][1], R[2][2], 1 );
-
-  // static int t = SDL_GetTicks();
-  // /* Compute frame time */
-  // int t2 = SDL_GetTicks();
-  // float dt = float(t2-t);
-  // t = t2;
 
   SDL_Event e;
   while(SDL_PollEvent(&e)) {
@@ -307,6 +303,7 @@ bool Update()
   return true;
 }
 
+// Interpolate from pixel a to pixel b
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
 {
   int N = result.size();
@@ -334,6 +331,7 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
   }
 }
 
+// Unused function which draws the edges of a polygon
 void DrawPolygonEdges(screen* screen, vector<Vertex>& vertices )
 {
   int V = vertices.size();
